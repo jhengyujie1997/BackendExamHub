@@ -1,12 +1,14 @@
 ﻿using BackendExamHub.Model;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using System.Data.SqlClient;
+using System.Xml.Linq;
 
 namespace BackendExamHub.Controllers
 {
-    [Route("api/[controller]")]
     [ApiController]
+    [Route("[controller]")]
     public class BackendExamHubController : ControllerBase
     {
         private readonly string _connectionString;
@@ -17,7 +19,7 @@ namespace BackendExamHub.Controllers
         }
 
         //Create
-        [HttpPost]
+        [HttpPost(Name = "CreateMyoffice_ACPD")]
         public async Task<ActionResult> CreateMyoffice_ACPDAsync(string Json)
         {
             try
@@ -87,36 +89,54 @@ namespace BackendExamHub.Controllers
         }
 
         //Update
-        [HttpPut]
+        [HttpPut(Name = "UpdateMyoffice_ACPDAsync")]
         public async Task<ActionResult> UpdateMyoffice_ACPDAsync(string Json)
-        {           
+        {
+            int result;
             try
             {
-                
+                using (SqlConnection conn = new SqlConnection(_connectionString))
+                {
+                    SqlCommand cmd = new SqlCommand("PR_Myoffice_ACPD_Update", conn);
+                    cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
-                
+                    cmd.Parameters.AddWithValue("@Json", Json);
+
+                    await conn.OpenAsync();
+                    await cmd.ExecuteNonQueryAsync();              
+                }
             }
             catch (Exception ex)
             {
                 return StatusCode(500, ex.Message);
             }
-            return Ok("User updated successfully!");
+            return Ok("User updated successfully!");           
         }
 
         //Delete
         [HttpDelete("{acpd_sid}")]
         public async Task<ActionResult> DeleteMyoffice_ACPDAsync(string acpd_sid)
         {
+            int result;
             try
             {
-                
+                using (SqlConnection conn = new SqlConnection(_connectionString))
+                {
+                    SqlCommand cmd = new SqlCommand("PR_Myoffice_ACPD_Delete", conn);
+                    cmd.CommandType = System.Data.CommandType.StoredProcedure;
 
-                return Ok("User deleted successfully!");
+                    cmd.Parameters.AddWithValue("@acpd_sid", acpd_sid);
+
+                    await conn.OpenAsync();
+                    result = await cmd.ExecuteNonQueryAsync();
+                }            
             }
             catch (Exception ex)
             {
                 return StatusCode(500, ex.Message);
             }
+
+            return Ok("User deleted successfully!");
         }
-    }       
+    }
 }

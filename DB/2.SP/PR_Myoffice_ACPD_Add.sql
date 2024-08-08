@@ -5,102 +5,60 @@ DROP PROCEDURE [dbo].[PR_Myoffice_ACPD_Add]
 GO
 -- 
 -- =============================================
--- Author:         youlin
--- Create date:    20190219
--- Description:    DB操作資料LOG檔
+-- Author:         Bevis
+-- Create date:    20240808
+-- Description:    新增使用者基本資訊
 -- Modified By     Modification Date    Modification Description
--- youlin          20190219             Ini 
+-- youlin          20240808             Ini 
 -- =============================================
 CREATE PROCEDURE [dbo].[PR_Myoffice_ACPD_Add]
-(
-	@ModType VARCHAR(30) = '',	        --異動類型(INSERT)	
-	@ApUser VARCHAR(100) = '',			--異動人員	 
-	@IP VARCHAR(20),				    --IP
-	@DES_IP VARCHAR(50) = '',			--目的端IP
-	@AppName VARCHAR(20) = 'RE_SKB',	--系統代碼
-	@ObjName VARCHAR(50),				--物件名   TABLE / VIEW / MQ  QM/ Q/ESP Web service
-	@Acc VARCHAR(20),					--存取帳號
-	@ActionName VARCHAR(50),			--程式/交易名稱
-	@AppFun VARCHAR(max),				--SP + 參數
-	@GUID NVARCHAR(36)='',              --異動參考號
-	@StartDate VARCHAR(30) = null,	    --程式開始時間
-	@ErrMsg NVARCHAR(200) = ''     	    --異動錯誤訊息
+(		
+	@Json			NVARCHAR(MAX) = ''			--Json Data	 
 ) 
 as
---動作類別  A:新增 D:刪除 E:修改 Q:查詢 R:報表 O:匯出下載 P:列印
-DECLARE	@ActionType VARCHAR(1), 
-@ModType_ VARCHAR(30),
-@ApUser_ INT,			        
-@IP_ VARCHAR(20),				   
-@DES_IP_ VARCHAR(50),			
-@AppName_ VARCHAR(20),		
-@ObjName_ VARCHAR(50),				
-@Acc_ VARCHAR(20),					
-@ActionName_ VARCHAR(50),			
-@AppFun_ VARCHAR(max),				
-@GUID_ NVARCHAR(36),              
-@StartDate_ VARCHAR(30),	    
-@ErrMsg_ NVARCHAR(200) 	   
 
-SET @ModType_ = @ModType;
-SET @ApUser_ = (SELECT Uno FROM AppUsers WHERE LOWER(UserId) = LOWER(@ApUser));
-SET @IP_ = @IP;
-SET @AppName_ = @AppName;
-SET @ObjName_ = @ObjName;
-SET @Acc_ = @Acc;
-SET @ActionName_ = @ActionName;
-SET @AppFun_ = @AppFun;
-SET @GUID_ = @GUID;
-SET @StartDate_ = @StartDate;
-SET @ErrMsg_ = @ErrMsg;
- 
+DECLARE	
+	@Json_			NVARCHAR(MAX),	   
+	@SID			NVARCHAR(20),
+	@ReturnValue	NVARCHAR(Max),
+	@NewID uniqueidentifier
+
+-- 現在 @SID 變數將包含存儲過程返回的值
+SELECT @SID AS 'GeneratedSID';
+SELECT @Json_ = @Json;
+SELECT @NewID = NEWID();
+
 BEGIN TRY 
 	BEGIN
 		SET NOCOUNT ON;   
 		--程式邏輯寫在這
-        IF(@ModType_ = '')
-        BEGIN
-             SELECT @ActionType = CASE SUBSTRING(UPPER(@ObjName_),1,6)
-							WHEN 'PR_RPT' THEN 'R'
-							ELSE 'Q'
-							END
-        END
-        ELSE
-        BEGIN
-             SELECT @ActionType = CASE SUBSTRING(UPPER(@ModType_),1,3)
-							WHEN 'INS' THEN 'A'
-                            WHEN 'UPD' THEN 'U'
-                            WHEN 'DEL' THEN 'D'
-							ELSE 'Q'
-							END
-        END
+        EXEC [dbo].[NEWSID] 
+			@TableName = N'Myoffice_ACPD', -- 替換成你的表名
+			@ReturnSID = @SID OUTPUT;
 
-		INSERT INTO AppAuditLog( [ApUser]
-								  ,[StartDate]
-								  ,[ApDate]
-								  ,[IP]
-								  ,[DES_IP]
-								  ,[AppName]
-								  ,[ObjName]
-								  ,[Acc]
-								  ,[ActionName]
-								  ,[ActionType]
-								  ,[AppFun]
-								  ,[GID]
-                                  ,[ErrMsg])
-					VALUES(@ApUser_
-							,@StartDate_
-							,GETDATE()
-							,@IP_
-							,@@SERVERNAME
-							,@AppName_
-							,@ObjName_
-							,@Acc_
-							,@ActionName_
-							,@ActionType
-							,@AppFun_
-							,@GUID_
-                            ,@ErrMsg_)
+		INSERT INTO Myoffice_ACPD
+		SELECT 
+			@SID AS acpd_sid,
+			JSON_VALUE(value, '$.acpd_cname') AS acpd_cname,
+			JSON_VALUE(value, '$.acpd_ename') AS acpd_ename,
+			JSON_VALUE(value, '$.acpd_sname') AS acpd_sname,
+			JSON_VALUE(value, '$.acpd_email') AS acpd_email,
+			JSON_VALUE(value, '$.acpd_status') AS acpd_status,
+			JSON_VALUE(value, '$.acpd_stop') AS acpd_stop,
+			JSON_VALUE(value, '$.acpd_stopMemo') AS acpd_stopMemo,
+			JSON_VALUE(value, '$.acpd_LoginID') AS acpd_LoginID,
+			JSON_VALUE(value, '$.acpd_LoginPW') AS acpd_LoginPW,
+			JSON_VALUE(value, '$.acpd_memo') AS acpd_memo,
+			JSON_VALUE(value, '$.acpd_nowdatetime') AS acpd_nowdatetime,
+			JSON_VALUE(value, '$.appd_nowid') AS appd_nowid,
+			JSON_VALUE(value, '$.acpd_upddatetitme') AS acpd_upddatetitme,
+			JSON_VALUE(value, '$.acpd_updid') AS acpd_updid
+		FROM OPENJSON(@Json_) 
+
+		-- 呼叫 usp_AddLog 儲存程序
+		EXEC [dbo].[usp_AddLog]　@_InBox_ReadID = 0,@_InBox_SPNAME = 'PR_Myoffice_ACPD_Add',@_InBox_GroupID = @NewID,@_InBox_ExProgram = 'ADD',@_InBox_ActionJSON = @Json_,@_OutBox_ReturnValues = @ReturnValue OUTPUT;
+
+
 	END
 END TRY
 BEGIN CATCH
@@ -112,41 +70,9 @@ GO
 GRANT EXEC ON [dbo].[PR_Myoffice_ACPD_Add] TO PUBLIC
 GO
 
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'LOG記錄檔' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'新增使用者基本資訊' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add'
 GO
 
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'異動類型' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@ModType'
+EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Json Data' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@Json'
 GO
 
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'異動人員' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@ApUser'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'IP' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@IP'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'目的端IP' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@DES_IP'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'系統代碼' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@AppName'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'物件名   TABLE / VIEW / MQ  QM/ Q/ESP Web service' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@ObjName'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'存取帳號' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@Acc'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'程式/交易名稱' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@ActionName'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'SP + 參數' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@AppFun'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'異動參考號' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@GUID'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'程式開始時間' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@StartDate'
-GO
-
-EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'異動錯誤訊息' , @level0type=N'SCHEMA',@level0name=N'dbo', @level1type=N'PROCEDURE',@level1name=N'PR_Myoffice_ACPD_Add', @level2type=N'PARAMETER',@level2name=N'@ErrMsg'
-GO
